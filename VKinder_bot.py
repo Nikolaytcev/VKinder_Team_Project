@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from random import randrange
 
 import vk_api
@@ -6,64 +8,82 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-token = ''
 
-vk = vk_api.VkApi(token=token)
-longpoll = VkLongPoll(vk)
+class VKinderBot:
+    def __init__(self, token):
+        self.token = token
+        self.vk = vk_api.VkApi(token=self.token)
+        self.longpoll = VkLongPoll(self.vk)
+        self.user_id = None
 
+    def write_msg(self, message, keyboard=None):
+        post = {
+            "user_id": self.user_id,
+            "message": message,
+            "random_id": randrange(10**7),
+        }
+        if keyboard is not None:
+            if message == "Пока((":
+                post["keyboard"] = keyboard.get_empty_keyboard()
+            else:
+                post["keyboard"] = keyboard.get_keyboard()
 
-def write_msg(user_id, message, keyboard=None):
-    post = {'user_id': user_id,
-            'message': message,
-            'random_id': randrange(10 ** 7)
-            }
-    if keyboard is not None:
-        post['keyboard'] = keyboard.get_keyboard()
-    vk.method('messages.send', post)
+        self.vk.method("messages.send", post)
 
+    def create_buttons(self):
+        keyboard = VkKeyboard()
+        buttons = ["like", "next", "add in black list"]
+        colors = [
+            VkKeyboardColor.NEGATIVE,
+            VkKeyboardColor.POSITIVE,
+            VkKeyboardColor.PRIMARY,
+        ]
+        for btn, btn_color in zip(buttons, colors):
+            keyboard.add_button(btn, btn_color)
+        keyboard.add_line()
+        keyboard.add_button("like list", VkKeyboardColor.NEGATIVE)
+        self.write_msg("Push 'like' or 'next' buttons", keyboard)
 
-def create_buttons(user_id):
-    keyboard = VkKeyboard()
-    buttons = ['like', 'next']
-    colors = [VkKeyboardColor.NEGATIVE, VkKeyboardColor.POSITIVE]
-    for btn, btn_color in zip(buttons, colors):
-        keyboard.add_button(btn, btn_color)
+    def conversation(self):
+        for event in self.longpoll.listen():
+            if event.type == VkEventType.MESSAGE_NEW:
+                if event.to_me:
+                    request = event.text
+                    self.user_id = event.user_id
+                    request_list = {
+                        "привет": {
+                            self.write_msg: [f"Хай, {self.user_id}"],
+                            self.create_buttons: [],
+                            self.next_user: [],
+                        },
+                        "пока": {self.write_msg: ["Пока((", VkKeyboard()]},
+                        "next": {self.next_user: []},
+                        "like": {self.add_user_db: []},
+                        "like list": {self.show_like_list: []},
+                        "add in black list": {self.add_black_list: []},
+                    }
+                    if request_list.get(request) is None:
+                        self.write_msg("Не поняла вашего ответа...")
+                    else:
+                        for k, val in request_list.get(request).items():
+                            k(*val)
 
-    write_msg(user_id, "push 'like' or 'next' buttons", keyboard)
+    def add_user_db(self):
+        pass
 
+    def next_user(self):
+        pass
 
-def add_user_db():
-    pass
+    def show_like_list(self):
+        pass
 
-
-def next_user():
-    pass
-
-
-def conversation():
-    for event in longpoll.listen():
-        if event.type == VkEventType.MESSAGE_NEW:
-
-            if event.to_me:
-                request = event.text
-                user_id = event.user_id
-
-                if request == "привет":
-                    write_msg(user_id,
-                              f"Хай, {user_id}")  # здесь нужно вместно id вернуть имя, через взаимодействие с ВК
-                    create_buttons(user_id)
-                elif request == "пока":
-                    write_msg(user_id, "Пока((")
-                elif request == "like":
-                    add_user_db()
-                elif request == "next":
-                    next_user()
-                else:
-                    write_msg(user_id, "Не поняла вашего ответа...")
+    def add_black_list(self):
+        pass
 
 
 def main():
-    conversation()
+    token = ""
+    VKinderBot(token).conversation()
 
 
 if __name__ == "__main__":
