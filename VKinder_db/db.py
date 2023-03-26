@@ -58,8 +58,9 @@ class DBService:
             self.session.commit()
 
     def add_user(self, user_info: List):
-        """Insert user into DB
-        :arg user_info - List of str [first name, last name, gender, city, profile link]
+        """
+        Insert user into DB
+        :param user_info: List of str [first name, last name, gender, city, profile link]
         """
         user = Users(first_name=user_info[0],
                      last_name=user_info[1],
@@ -69,21 +70,28 @@ class DBService:
         self.session.add(user)
         self.session.commit()
 
-    def add_relation(self, relation: List, status=1):
-        """Add relation from one user to another
-        :arg relation - List of str [link of user who is going to add, link of added user]
-        :arg status - 1 for Favorite, 2 for Blacklist
+    def add_relation(self, from_user, to_user, status='Favorite'):
         """
-        from_id = self.session.query(Users.user_id).filter(Users.profile_link == relation[0]).scalar_subquery()
-        to_id = self.session.query(Users.user_id).filter(Users.profile_link == relation[1]).scalar_subquery()
+        Add relation from one user to another
+        :param from_user: link to profile of user who add relation
+        :param to_user: link to profile who will be added
+        :param status: 'Favorite' or 'Blacklist'
+        """
+        if status not in ('Favorite', 'Blacklist'):
+            print("Не допустимое значение статуса, укажите 'Favorite' или 'Blacklist'")
+            return
+        status = 1 if status == 'Favorite' else 2
+        from_id = self.session.query(Users.user_id).filter(Users.profile_link == from_user).scalar_subquery()
+        to_id = self.session.query(Users.user_id).filter(Users.profile_link == to_user).scalar_subquery()
         relation = Relations(from_user_id=from_id, to_user_id=to_id, status_id=status)
         self.session.add(relation)
         self.session.commit()
 
     def get_favorite_list(self, user_link):
-        """Return list of favorites, which are tuples, each tuple contains user info
-        :arg user_link - link to vk profile
-        :return favorites - list of tuples
+        """
+        Return list of favorites, which are tuples, each tuple contains user info
+        :param user_link: link to vk profile
+        :return: favorites: list of tuples
         """
         user_id = self.session.query(Users.user_id).filter(Users.profile_link == user_link).first()[0]
         favorites = self.session.query(Users.first_name,
@@ -97,9 +105,10 @@ class DBService:
         return favorites
 
     def get_blocked_list(self, user_link):
-        """Return list of blocked, which are tuples, each tuple contains user info
-        :arg user_link - link to vk profile
-        :return blocked - list of tuples
+        """
+        Return list of blocked, which are tuples, each tuple contains user info
+        :param user_link: link to vk profile
+        :return: blocked: list of tuples
         """
         user_id = self.session.query(Users.user_id).filter(Users.profile_link == user_link).first()[0]
         blocked = self.session.query(Users.first_name,

@@ -13,12 +13,10 @@ service.add_user(user)
 user = ['Sergey', 'Maslukov', 'Male', 'Moskow', 'link4']
 service.add_user(user)
 
-connection = ['link1', 'link2']
-service.add_relation(connection, 1)
-connection = ['link1', 'link3']
-service.add_relation(connection, 1)
-connection = ['link1', 'link4']
-service.add_relation(connection, 2)
+
+service.add_relation(from_user='link1', to_user='link2', status='Favorite')
+service.add_relation('link1', 'link3', 'Favorite')
+service.add_relation('link1', 'link4', 'Blacklist')
 
 favorites = service.get_favorite_list('link1')
 print(favorites)
