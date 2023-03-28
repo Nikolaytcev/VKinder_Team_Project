@@ -62,28 +62,27 @@ class DBService:
         Insert user into DB
         :param user_info: List of str [first name, last name, gender, city, profile link]
         """
-        user = Users(first_name=user_info[0],
-                     last_name=user_info[1],
-                     gender=user_info[2],
-                     city=user_info[3],
-                     profile_link=user_info[4])
+        user = Users(user_id=user_info[0],
+                     first_name=user_info[1],
+                     last_name=user_info[2],
+                     gender=user_info[3],
+                     city=user_info[4],
+                     profile_link=user_info[5])
         self.session.add(user)
         self.session.commit()
 
-    def add_relation(self, from_user, to_user, status='Favorite'):
+    def add_relation(self, from_user_id: int, to_user_id: int, status='Favorite'):
         """
         Add relation from one user to another
-        :param from_user: link to profile of user who add relation
-        :param to_user: link to profile who will be added
+        :param from_user_id: profile id of user who add relation
+        :param to_user_id: profile id who will be added
         :param status: 'Favorite' or 'Blacklist'
         """
         if status not in ('Favorite', 'Blacklist'):
             print("Не допустимое значение статуса, укажите 'Favorite' или 'Blacklist'")
             return
         status = 1 if status == 'Favorite' else 2
-        from_id = self.session.query(Users.user_id).filter(Users.profile_link == from_user).scalar_subquery()
-        to_id = self.session.query(Users.user_id).filter(Users.profile_link == to_user).scalar_subquery()
-        relation = Relations(from_user_id=from_id, to_user_id=to_id, status_id=status)
+        relation = Relations(from_user_id=from_user_id, to_user_id=to_user_id, status_id=status)
         self.session.add(relation)
         self.session.commit()
 
