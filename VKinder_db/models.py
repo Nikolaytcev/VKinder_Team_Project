@@ -12,7 +12,6 @@ class Users(Base):
     last_name = sq.Column(sq.String(length=50), nullable=False)
     gender = sq.Column(sq.String(length=10))
     city = sq.Column(sq.String(length=100))
-    profile_link = sq.Column(sq.String(length=300))
 
 
 class Status(Base):

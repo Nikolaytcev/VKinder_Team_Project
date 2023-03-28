@@ -66,8 +66,7 @@ class DBService:
                      first_name=user_info[1],
                      last_name=user_info[2],
                      gender=user_info[3],
-                     city=user_info[4],
-                     profile_link=user_info[5])
+                     city=user_info[4])
         self.session.add(user)
         self.session.commit()
 
@@ -86,35 +85,33 @@ class DBService:
         self.session.add(relation)
         self.session.commit()
 
-    def get_favorite_list(self, user_link):
+    def get_favorite_list(self, user_id):
         """
         Return list of favorites, which are tuples, each tuple contains user info
-        :param user_link: link to vk profile
+        :param user_id: vk profile id
         :return: favorites: list of tuples
         """
-        user_id = self.session.query(Users.user_id).filter(Users.profile_link == user_link).first()[0]
-        favorites = self.session.query(Users.first_name,
+        favorites = self.session.query(Users.user_id,
+                                       Users.first_name,
                                        Users.last_name,
                                        Users.gender,
-                                       Users.city,
-                                       Users.profile_link) \
+                                       Users.city)\
             .join(Relations, Users.user_id == Relations.to_user_id) \
             .join(Status, Relations.status_id == Status.status_id) \
             .filter(Relations.from_user_id == user_id, Status.status == 'Favorite').all()
         return favorites
 
-    def get_blocked_list(self, user_link):
+    def get_blocked_list(self, user_id):
         """
         Return list of blocked, which are tuples, each tuple contains user info
-        :param user_link: link to vk profile
+        :param user_id: vk profile id
         :return: blocked: list of tuples
         """
-        user_id = self.session.query(Users.user_id).filter(Users.profile_link == user_link).first()[0]
-        blocked = self.session.query(Users.first_name,
+        blocked = self.session.query(Users.user_id,
+                                     Users.first_name,
                                      Users.last_name,
                                      Users.gender,
-                                     Users.city,
-                                     Users.profile_link) \
+                                     Users.city) \
             .join(Relations, Users.user_id == Relations.to_user_id) \
             .join(Status, Relations.status_id == Status.status_id) \
             .filter(Relations.from_user_id == user_id, Status.status == 'Blacklist').all()
