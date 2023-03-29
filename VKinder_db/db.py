@@ -15,7 +15,7 @@ class DBHandler:
         load_dotenv()
         self.DB = os.getenv('DB')
         self.DB_USER = os.getenv('DB_USER')
-        self.DB_PASS = os.getenv('DB_PASS')
+        self.DB_PASS = 'Ybrjkfqwtd1990'
         self.DB_HOST = os.getenv('DB_HOST')
         self.DB_PORT = os.getenv('DB_PORT')
         self.db_name = db_name
@@ -70,6 +70,9 @@ class DBService:
         self.session.add(user)
         self.session.commit()
 
+    def check_user_in_db(self, user_id):
+        return self.session.query(Users.user_id).filter(Users.user_id == user_id)
+
     def add_relation(self, from_user_id: int, to_user_id: int, status='Favorite'):
         """
         Add relation from one user to another
@@ -78,7 +81,7 @@ class DBService:
         :param status: 'Favorite' or 'Blacklist'
         """
         if status not in ('Favorite', 'Blacklist'):
-            print("Не допустимое значение статуса, укажите 'Favorite' или 'Blacklist'")
+            print("Недопустимое значение статуса, укажите 'Favorite' или 'Blacklist'")
             return
         status = 1 if status == 'Favorite' else 2
         relation = Relations(from_user_id=from_user_id, to_user_id=to_user_id, status_id=status)
