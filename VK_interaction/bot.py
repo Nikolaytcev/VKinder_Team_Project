@@ -197,14 +197,3 @@ class VKinderBot:
 
 def text_emoji(text, emoji_alias):
     return emoji.emojize(f"{text} :{emoji_alias}:", language="alias")
-
-
-def main():
-    db = connect_to_db('vkinder1_db')
-    token = 'vk1.a.3hLJWip_fL-k0tgKoUg-Kn0EUKjboWC8GD8dQl_As0aVWMVen7E3SfaaXpQXpifxHwTUVrtFnmNH891_CpZNuzSp89VXUYyMhRPrkGxibgKaR5778xzpos0-NQETjqVMfThGKSeMtCIFi8Nk4MaqDUaeN5zHoQOgKuP-rDy2UXTtEwLYrQJNPDzWoLWYXB6J-wQ5fTFk4OEu-mdITGWPgw'
-    token_vk = 'vk1.a.Rm4LAwHRhZlM38N8Vr8j5X6HLykqNbNXWz31PHeksn-JY8SZctMDLrZiLa2M0N0u5_xRHsY48YH-6UxAYZ7evrIvekjlQUXop2POqdEt_ORD3zCFrA5m63qs4__PXxrvxa455rNVQmSy6VTuk55_z8AuU1wHhmFzqossMDJvtRij5US3XD1iu-g2j6Ryuj0sMJMzyKdLCYB1lpFXMt1Pxw'
-    VKinderBot(token, token_vk, db).conversation()
-
-
-if __name__ == "__main__":
-    main()
