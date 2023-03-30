@@ -3,6 +3,7 @@ from VKinder_db.db import DBService, DBHandler, connect_to_db
 
 from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+import requests
 from random import randrange
 import vk_api
 import emoji
@@ -21,6 +22,12 @@ class VKinderBot:
         self.users_data = {}
 
     def write_msg(self, message, keyboard=None, attachment=None):
+        """
+        Выводит сообщение пользователю.
+        :param message: str
+        :param keyboard: buttons
+        :param attachment: photo
+        """
         params = {
             "user_id": self.user["id"],
             "message": message,
@@ -37,6 +44,9 @@ class VKinderBot:
         self.vk_bot.method("messages.send", params)
 
     def create_buttons(self):
+        """
+        Создание кнопок взаимодействия.
+        """
         keyboard = VkKeyboard()
         buttons = [
             text_emoji("В избранное", "heart"),
@@ -55,6 +65,9 @@ class VKinderBot:
         self.write_msg("Посмотри кого я нашел...", keyboard)
 
     def conversation(self):
+        """
+        Взаимодействие бота с пользователем.
+        """
         for event in self.longpoll.listen():
             if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
                 request = event.text
@@ -88,6 +101,11 @@ class VKinderBot:
                         k(*val)
 
     def add_user_db(self, request):
+        """
+        Добавление пользователя, избранных пользователей и пользователей из черного списка в БД.
+        Проверка вышеуказанных пользователей на наличие их в БД, если пользователей нет в БД, добавить.
+        :param request: str
+        """
         sex = {2: "male", 1: "female"}
         if request == "привет":
             if not self.db.check_user_in_db(self.user["id"]).all():
@@ -114,7 +132,11 @@ class VKinderBot:
                 )
 
     def next_user(self):
-
+        """
+        Проверяет следующего вызванного кандидата по списку избранных и черному списку, если нет кандидата в
+        указанных списках, выводит информацию о нём пользователю.
+        :return:
+        """
         self.current_candidate = self.user_candidates.get(self.user['id']).pop()
 
         try:
@@ -147,6 +169,9 @@ class VKinderBot:
             self.next_user()
 
     def __check_mutual_sympathy(self):
+        """
+        Проверка на взаимную симпатию.
+        """
         user_favorite_list = [i[0] for i in self.db.get_favorite_list(self.user["id"])]
         candidate_favorite_list = [
             i[0]
@@ -158,6 +183,10 @@ class VKinderBot:
         )
 
     def __get_message_info(self, user):
+        """
+        Получение информации о кандидате в формате: имя и фамилия, ссылка, фото.
+        :param user:
+        """
         name = f"{user[1]} {user[2]}"
         link = f"https://vk.com/id{user[0]}"
         photos = self.vk_interaction.photos_get(user[0])
@@ -168,6 +197,10 @@ class VKinderBot:
         return attachment, message
 
     def add_relation(self, status):
+        """
+        Добавление кандидата в список избранных или в чёрный список.
+        :param status: str (Favorite, Blacklist)
+        """
         self.db.add_relation(
             self.user["id"], self.users_data.get(self.user["id"]), status=status
         )
@@ -182,6 +215,9 @@ class VKinderBot:
             self.next_user()
 
     def show_like_list(self):
+        """
+        Выводит список избранных пользователю.
+        """
         like_list = self.db.get_favorite_list(self.user["id"])
         self.write_msg("Список избранных: ")
         if like_list:
@@ -190,6 +226,10 @@ class VKinderBot:
                 self.write_msg(message, attachment=attachment)
 
     def get_user_info(self, user_id):
+        """
+        Получение информации о пользователе или о кандидате в формате [user_id, 'country', 'city', 'bdate', 'sex']
+        :param user_id: int
+        """
         values = {"user_ids": user_id, "fields": ", ".join(self.user_fields)}
         user_info = self.vk_bot.method("users.get", values=values)
         return user_info[0]
@@ -197,3 +237,4 @@ class VKinderBot:
 
 def text_emoji(text, emoji_alias):
     return emoji.emojize(f"{text} :{emoji_alias}:", language="alias")
+
