@@ -8,8 +8,14 @@ class VkInteraction:
         self.vk_session = vk_api.VkApi(token=token)
         self.user_fields = ['country', 'city', 'bdate', 'sex']
 
-    def get_user_candidates(self, user):
-        search_params = {'status': 6}
+    def get_user_candidates(self, user, offset=0):
+        search_params = {
+            'status': 6,
+            'offset': offset,
+            'count': 10,
+            'is_closed': False,
+            'fields': ','.join(self.user_fields)
+        }
         for field in self.user_fields:
             if field not in user:
                 continue

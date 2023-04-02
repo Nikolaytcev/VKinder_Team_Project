@@ -1,186 +1,214 @@
 from VK_interaction.interaction import VkInteraction
-from VKinder_db.db import DBService, DBHandler, connect_to_db
 
-from vk_api.longpoll import VkLongPoll, VkEventType
-from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-import requests
 from random import randrange
-import vk_api
+import requests
+import json
 import emoji
+import re
 
 
 class VKinderBot:
-    def __init__(self, bot_token, vk_token, db):
+    def __init__(self, bot_token, group_id, vk_token, db):
         self.db = db
         self.vk_interaction = VkInteraction(token=vk_token)
-        self.vk_bot = vk_api.VkApi(token=bot_token)
-        self.longpoll = VkLongPoll(self.vk_bot)
-        self.user = {}
+        self.url = 'https://api.vk.com/method/'
+        self.group_id = group_id
         self.user_fields = ["country", "city", "bdate", "sex"]
-        self.user_candidates = {}
-        self.current_candidate = None
-        self.users_data = {}
-
-    def write_msg(self, message, keyboard=None, attachment=None):
-        """
-        Выводит сообщение пользователю.
-        :param message: str
-        :param keyboard: buttons
-        :param attachment: photo
-        """
-        params = {
-            "user_id": self.user["id"],
-            "message": message,
-            "random_id": randrange(10**7),
+        self.params = {
+            'access_token': bot_token,
+            'v': '5.85'
         }
-        if keyboard:
-            if message == "Пока((":
-                params["keyboard"] = keyboard.get_empty_keyboard()
-            else:
-                params["keyboard"] = keyboard.get_keyboard()
-        if attachment:
-            params["attachment"] = attachment
+        self.ts = 0
+        self.candidates = {}
+        self.current_candidate = {}
 
-        self.vk_bot.method("messages.send", params)
+    def connect_vk(self):
+        url = self.url + 'groups.getLongPollServer'
+        params = {
+            **self.params,
+            'group_id': self.group_id
+        }
+        connect = requests.get(url, params).json()
+        connect = connect['response']
+        self.ts = connect['ts']
+        return connect
 
-    def create_buttons(self):
+    def get_longpoll_server(self, connect):
+        url = connect['server']
+        params = {
+            'act': 'a_check',
+            'key': connect['key'],
+            'wait': 25,
+            'mode': 2,
+            'ts': self.ts
+        }
+        response = requests.get(url, params).json()
+        if 'ts' in response:
+            self.ts = response['ts']
+        return response
+
+    def listen_longpoll(self):
+        connect = self.connect_vk()
+        while True:
+            updates = self.get_longpoll_server(connect)
+            for update in updates['updates']:
+                if update['type'] == 'message_new':
+                    user_id = update['object']['message']['from_id']
+                    user_info = self.get_user_info(user_id)
+                    if 'payload' in update['object']['message']:
+                        payload = update['object']['message']['payload']
+                        if 'command' in payload:
+                            self.add_user_db(user_info)
+                            self.send_message(user_id, message=f'Привет, {user_info["first_name"]}!')
+                            self.next_user(user_info)
+                        if 'button' in update['object']['message']['payload']:
+                            button = self.get_button_name(update['object']['message']['payload'])
+                            request_list = {
+                                'like': {
+                                    self.add_user_db: [user_info],
+                                    self.add_relation: [user_id, 'Favorite'],
+                                    self.send_message: [user_id,
+                                                        'Пользователь теперь у тебя в избранном! А вот и ещё один'],
+                                    self.next_user: [user_info]
+                                },
+                                'next': {
+                                    self.next_user: [user_info]
+                                },
+                                'dislike': {
+                                    self.add_user_db: [user_info],
+                                    self.add_relation: [user_id, 'Blacklist'],
+                                    self.send_message: [user_id,
+                                                        'Пользователь скрыт. Но может быть тебе понравится другой...'],
+                                    self.next_user: [user_info]
+                                },
+                                'favorites': {
+                                    self.show_like_list: [user_id]
+                                }
+                            }
+                            for k, val in request_list.get(button).items():
+                                k(*val)
+                    else:
+                        self.send_message(user_id, message='Прости, я воспринимаю только кнопочки...')
+
+    def send_message(self, user_id, message, attachments=None):
+        url = self.url + 'messages.send'
+        params = {
+            **self.params,
+            'user_id': user_id,
+            'random_id': randrange(10 ** 7),
+            'message': message,
+            'keyboard': json.dumps(self.get_buttons())
+        }
+        if attachments:
+            params['attachment'] = attachments
+        requests.post(url, params)
+
+    def get_user_info(self, user_id):
         """
-        Создание кнопок взаимодействия.
+        Получение информации о пользователе или о кандидате в формате [user_id, 'country', 'city', 'bdate', 'sex']
+        :param user_id: int
         """
-        keyboard = VkKeyboard()
-        buttons = [
-            text_emoji("В избранное", "heart"),
-            text_emoji("Следующий", "fast_forward"),
-            text_emoji("Не нравится", "poop"),
-        ]
-        colors = [
-            VkKeyboardColor.POSITIVE,
-            VkKeyboardColor.PRIMARY,
-            VkKeyboardColor.NEGATIVE,
-        ]
-        for btn, btn_color in zip(buttons, colors):
-            keyboard.add_button(btn, btn_color)
-        keyboard.add_line()
-        keyboard.add_button(text_emoji("Избранное", "star"), VkKeyboardColor.PRIMARY)
-        self.write_msg("Посмотри кого я нашел...", keyboard)
+        url = self.url + 'users.get'
+        params = {**self.params, 'user_ids': user_id, 'fields': ','.join(self.user_fields)}
+        user_info = requests.get(url, params).json()['response']
+        return user_info[0]
 
-    def conversation(self):
-        """
-        Взаимодействие бота с пользователем.
-        """
-        for event in self.longpoll.listen():
-            if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
-                request = event.text
-                self.user = self.get_user_info(event.user_id)
-
-                self.user_candidates[event.user_id] = self.vk_interaction.get_user_candidates(self.user)
-
-                request_list = {
-                    "привет": {
-                        self.write_msg: [f"Привет, {self.user['first_name']}!"],
-                        self.create_buttons: [],
-                        self.next_user: [],
-                        self.add_user_db: [request],
-                    },
-                    "пока": {self.write_msg: ["Пока((", VkKeyboard()]},
-                    text_emoji("Следующий", "fast_forward"): {self.next_user: []},
-                    text_emoji("В избранное", "heart"): {
-                        self.add_user_db: [request],
-                        self.add_relation: ["Favorite"],
-                    },
-                    text_emoji("Избранное", "star"): {self.show_like_list: []},
-                    text_emoji("Не нравится", "poop"): {
-                        self.add_user_db: [request],
-                        self.add_relation: ["Blacklist"],
-                    },
-                }
-                if request_list.get(request) is None:
-                    self.write_msg("А можно поподробнее?...")
-                else:
-                    for k, val in request_list.get(request).items():
-                        k(*val)
-
-    def add_user_db(self, request):
+    def add_user_db(self, user):
         """
         Добавление пользователя, избранных пользователей и пользователей из черного списка в БД.
         Проверка вышеуказанных пользователей на наличие их в БД, если пользователей нет в БД, добавить.
-        :param request: str
+        :param user: dict
         """
         sex = {2: "male", 1: "female"}
-        if request == "привет":
-            if not self.db.check_user_in_db(self.user["id"]).all():
-                self.db.add_user(
-                    [
-                        self.user["id"],
-                        self.user["first_name"],
-                        self.user["last_name"],
-                        sex.get(self.user["sex"]),
-                        self.user["city"]["title"],
-                    ]
-                )
-        else:
-            if not self.db.check_user_in_db(self.users_data.get(self.user["id"])).all():
-                like_person = self.get_user_info(self.users_data.get(self.user["id"]))
-                self.db.add_user(
-                    [
-                        like_person["id"],
-                        like_person["first_name"],
-                        like_person["last_name"],
-                        sex.get(like_person["sex"]),
-                        like_person["city"]["title"],
-                    ]
-                )
+        if not self.db.check_user_in_db(user['id']).all():
+            db_info = [
+                    user['id'],
+                    user['first_name'],
+                    user['last_name'],
+                    sex[user['sex']]
+                ]
+            if 'city' in user:
+                db_info.append(user['city']['title'])
+            self.db.add_user(db_info)
 
-    def next_user(self):
+    def next_user(self, user_info: object) -> object:
         """
         Проверяет следующего вызванного кандидата по списку избранных и черному списку, если нет кандидата в
         указанных списках, выводит информацию о нём пользователю.
         :return:
         """
-        self.current_candidate = self.user_candidates.get(self.user['id']).pop()
+        user_id = user_info['id']
+        if user_id not in self.candidates:
+            user_candidates = self.vk_interaction.get_user_candidates(user_info)
+            self.candidates[user_id] = {'offset': 10, 'user_candidates': user_candidates}
+        elif not self.candidates[user_id]['user_candidates']:
+            offset = self.candidates[user_id]['offset']
+            user_candidates = self.vk_interaction.get_user_candidates(user_info, offset)
+            self.candidates[user_id]['offset'] += 10
+            self.candidates[user_id]['user_candidates'] = user_candidates
+        self.current_candidate[user_id] = self.candidates[user_id]['user_candidates'].pop()
+        while not self.candidates[user_id]['user_candidates'] or \
+                self.current_candidate[user_id]['is_closed'] or \
+                self.candidate_done(user_id):
+            if not self.candidates[user_id]['user_candidates']:
+                offset = self.candidates[user_id]['offset']
+                user_candidates = self.vk_interaction.get_user_candidates(user_info, offset)
+                self.candidates[user_id]['offset'] += 10
+                self.candidates[user_id]['user_candidates'] = user_candidates
+            elif self.candidates[user_id]['user_candidates']:
+                self.current_candidate[user_id] = self.candidates[user_id]['user_candidates'].pop()
 
-        try:
-            favorite_list = [i[0] for i in self.db.get_blocked_list(self.user["id"])]
-            blocked_list = [i[0] for i in self.db.get_favorite_list(self.user["id"])]
-            if (
-                self.current_candidate["id"] not in favorite_list
-                and self.current_candidate["id"] not in blocked_list
-            ):
-                self.users_data[self.user["id"]] = self.current_candidate["id"]
-                user_name = f"{self.current_candidate['first_name']} {self.current_candidate['last_name']}"
-                link = f'https://vk.com/id{self.current_candidate["id"]}'
-                photos = self.vk_interaction.photos_get(self.current_candidate["id"])
-                message = f"{user_name}\r\n{link}"
-                attachments = []
-                i = 0
-                for photo in photos:
-                    if i > 2:
-                        break
-                    i += 1
-                    attachments.append(
-                        f'photo{self.current_candidate["id"]}_{photo["id"]}'
-                    )
-                attachment = ",".join(attachments)
-                self.write_msg(message, attachment=attachment)
-            else:
-                self.next_user()
-        except vk_api.exceptions.ApiError:
-            print("This profile is private")
-            self.next_user()
+        current_candidate = self.current_candidate[user_id]
+        user_name = f"{current_candidate['first_name']} {current_candidate['last_name']}"
+        link = f'https://vk.com/id{current_candidate["id"]}'
+        photos = self.vk_interaction.photos_get(current_candidate["id"])
+        message = f"{user_name}\r\n{link}"
+        attachments = []
+        i = 0
+        for photo in photos:
+            if i > 2:
+                break
+            i += 1
+            attachments.append(
+                f'photo{current_candidate["id"]}_{photo["id"]}'
+            )
+        attachment = ",".join(attachments)
+        self.send_message(user_id, "Посмотри кого я нашел...")
+        self.send_message(user_id, message, attachments=attachment)
 
-    def __check_mutual_sympathy(self):
+    def candidate_done(self, user_id):
+        is_done = False
+        c_id = self.current_candidate[user_id]['id']
+        if c_id in self.db.get_favorite_list(user_id):
+            is_done = True
+        elif c_id in self.db.get_blocked_list(user_id):
+            is_done = True
+        return is_done
+
+    def add_relation(self, user_id, status):
         """
-        Проверка на взаимную симпатию.
+        Добавление кандидата в список избранных или в чёрный список.
+        :param user_id: int
+        :param status: str (Favorite, Blacklist)
         """
-        user_favorite_list = [i[0] for i in self.db.get_favorite_list(self.user["id"])]
-        candidate_favorite_list = [
-            i[0]
-            for i in self.db.get_favorite_list(self.users_data.get(self.user["id"]))
-        ]
-        return (
-            self.user["id"] in candidate_favorite_list
-            and self.users_data.get(self.user["id"]) in user_favorite_list
-        )
+
+        self.add_user_db(self.current_candidate[user_id])
+        self.db.add_relation(
+            user_id, self.current_candidate[user_id]['id'], status=status)
+
+    def show_like_list(self, user_id):
+        """
+        Выводит список избранных пользователю.
+        :param user_id: int
+        """
+        like_list = self.db.get_favorite_list(user_id)
+        if like_list:
+            self.send_message(user_id, "Список избранных: ")
+            for i in like_list:
+                attachment, message = self.__get_message_info(i)
+                self.send_message(user_id, message, attachments=attachment)
+        else:
+            self.send_message(user_id, "У вас пока не добавлено ни одного пользователя в избранное")
 
     def __get_message_info(self, user):
         """
@@ -196,45 +224,56 @@ class VKinderBot:
         message = f"{name}\r\n{link}"
         return attachment, message
 
-    def add_relation(self, status):
-        """
-        Добавление кандидата в список избранных или в чёрный список.
-        :param status: str (Favorite, Blacklist)
-        """
-        self.db.add_relation(
-            self.user["id"], self.users_data.get(self.user["id"]), status=status
-        )
-        if self.__check_mutual_sympathy():
-            attachment, message = self.__get_message_info(
-                self.get_user_info(self.users_data.get(self.user["id"]))
-            )
-            self.write_msg(
-                f" У вас взаимная симпатия с {message}", attachment=attachment
-            )
-        else:
-            self.next_user()
+    @staticmethod
+    def get_button_name(string):
+        pattern = r'"button"\s*:\s*"(\w+)"'
+        match = re.search(pattern, string)
+        button_name = match.group(1)
+        return button_name
 
-    def show_like_list(self):
-        """
-        Выводит список избранных пользователю.
-        """
-        like_list = self.db.get_favorite_list(self.user["id"])
-        self.write_msg("Список избранных: ")
-        if like_list:
-            for i in like_list:
-                attachment, message = self.__get_message_info(i)
-                self.write_msg(message, attachment=attachment)
-
-    def get_user_info(self, user_id):
-        """
-        Получение информации о пользователе или о кандидате в формате [user_id, 'country', 'city', 'bdate', 'sex']
-        :param user_id: int
-        """
-        values = {"user_ids": user_id, "fields": ", ".join(self.user_fields)}
-        user_info = self.vk_bot.method("users.get", values=values)
-        return user_info[0]
+    @staticmethod
+    def get_buttons():
+        return {
+            'one_time': False,
+            'buttons': [
+                [
+                    {
+                        'action': {
+                            'type': 'text',
+                            'payload': '{"button": "like"}',
+                            'label': text_emoji("В избранное", "heart")
+                        },
+                        'color': 'positive'
+                    },
+                    {
+                        'action': {
+                            'type': 'text',
+                            'payload': '{"button": "next"}',
+                            'label': text_emoji("Следующий", "fast_forward")
+                        },
+                        'color': 'primary'
+                    },
+                    {
+                        'action': {
+                            'type': 'text',
+                            'payload': '{\"button\": \"dislike\"}',
+                            'label': text_emoji("Не нравится", "poop")
+                        },
+                        'color': 'negative'
+                    }
+                ],
+                [
+                    {
+                        'action': {
+                            'type': 'text',
+                            'payload': '{\"button\": \"favorites\"}',
+                            'label': text_emoji("Избранное", "star")
+                        },
+                        'color': 'primary'
+                    }
+                ]
+            ]}
 
 
 def text_emoji(text, emoji_alias):
     return emoji.emojize(f"{text} :{emoji_alias}:", language="alias")
-

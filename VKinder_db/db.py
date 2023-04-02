@@ -15,7 +15,7 @@ class DBHandler:
         load_dotenv()
         self.DB = os.getenv('DB')
         self.DB_USER = os.getenv('DB_USER')
-        self.DB_PASS = 'Ybrjkfqwtd1990'
+        self.DB_PASS = os.getenv('DB_PASS')
         self.DB_HOST = os.getenv('DB_HOST')
         self.DB_PORT = os.getenv('DB_PORT')
         self.db_name = db_name
