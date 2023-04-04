@@ -3,5 +3,6 @@ venv/
 .DS_Store
 **/__pycache__/
 *.ini
-!example.ini
+!settings.ini
 .env
+test_db.py

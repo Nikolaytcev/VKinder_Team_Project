@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import psycopg2
 import sqlalchemy
 from sqlalchemy import func
-from sqlalchemy.orm import sessionmaker, aliased
+from sqlalchemy.orm import sessionmaker
 
 from VKinder_db.models import create_tables, Users, Relations, Status
 
@@ -62,6 +62,8 @@ class DBService:
         Insert user into DB
         :param user_info: List of str [first name, last name, gender, city, profile link]
         """
+        if len(user_info) == 4:
+            user_info.append("Unknown")
         user = Users(user_id=user_info[0],
                      first_name=user_info[1],
                      last_name=user_info[2],

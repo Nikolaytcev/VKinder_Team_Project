@@ -34,5 +34,5 @@ class Relations(Base):
 
 def create_tables(engine):
     """Create all described tables"""
-    Base.metadata.drop_all(engine)
+    # Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
